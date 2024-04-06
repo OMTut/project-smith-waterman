@@ -8,30 +8,6 @@
 
 using std::cout, std::cin, std::endl, std::string;
 
-
-/*****************************
- * chooseFileSize
- * return string
- * Desc: returns the file path as a string
- *       1 for Test File (100 sequences) or 2 for Full File
-******************************/
-string chooseFileSize() {
-    int fileChoice;
-    do {
-        cout << "Enter 1 for Test File (100 sequences) or 2 for Full File (100000 sequences): ";
-        cin >> fileChoice;
-        if (fileChoice != 1 && fileChoice != 2) {
-            cout << "Invalid choice. Please try again." << endl;
-        }
-    } while (fileChoice != 1 && fileChoice != 2);
-    if (fileChoice == 1) {
-        return "../dataset/ERR000001_FASTQ_100.txt";
-    } else {
-        return "../dataset/ERR000001_FASTQ_FULL.txt";
-    }
-}
-
-
 /*****************************
  * getSequenceToFind
  * return string
