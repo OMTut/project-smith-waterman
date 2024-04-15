@@ -28,7 +28,7 @@ Alginment Score: 6
 Example: seq1='GGG' and seq2='TTT'<BR>
 Alignment Score: 0
 
-Example seq1='GGG" and seq2='TTA'<BR>
+Example seq1='GGG" and seq2='GGA'<BR>
 ALignment Score: 4
 
 Note: in the full genome, we are diving the millions of characters into blocks of 10000. I'm not 100% sure, but a score of 7500 out of 10000 means that it's relatively similar. I'm not familiar enough with bioinformatics to know exactly how or why yet.
