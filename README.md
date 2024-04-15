@@ -2,9 +2,21 @@
 
 s3_it is a fully working iterative implementation of the Smith-Waterman algorithm used to find local alignments.
 
-Because the size of the genomes are huge, I'm only printing out an alignment score.
+Because the size of the genomes are huge, I'm only printing out an alignment scores. The apps all take fasta files from the /dataset directory.
 
-### Smith-Waterman Algo
+### Compiling
+```
+g++ -o whatever s3_it.cpp
+```
+### Running
+```
+./whatever ../dataset/filename.fasta ../dataset/filename2.fasta
+```
+
+### Fasta Files
+They can be edited just like txt files. Just open it up, make your changes, and save.
+
+## Smith-Waterman Algo
 A high level (because that's all I understand at this point) is that the SW algo creates a matrix from the two sequences and fills it with scores. The scores represent how close the elements in the sequences match. Each score is computed using a "match score", "mismatch_penalty", and "gap_penalty".
 
 Scoring<BR>
