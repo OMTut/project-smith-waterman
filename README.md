@@ -2,6 +2,8 @@
 
 s3_it is a fully working iterative implementation of the Smith-Waterman algorithm used to find local alignments.
 
+s3_pp is a fully working (but partial implementation) of parallelism. I've only managed to get the inner loop to run in parallel so far. My attempts at outter loop always lead to incorrect numbers. It could be a race condition. I dunno.
+
 Because the size of the genomes are huge, I'm only printing out an alignment scores. The apps all take fasta files from the /dataset directory.
 
 ### Compiling
