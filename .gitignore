@@ -1,10 +1,5 @@
 **vscode
+.vscode
 _src
 
 # file too large for school git
-dataset/ERR000001_1.fastq
-dataset/ERR000001_FASTQ.txt
-#dataset/ERR000001_FASTQ_FULL.txt
-dataset/gbbct107.fsa_aa.gz
-
-s3_pp

@@ -5,8 +5,13 @@ s3_it is a fully working iterative implementation of the Smith-Waterman algorith
 Because the size of the genomes are huge, I'm only printing out an alignment scores. The apps all take fasta files from the /dataset directory.
 
 ### Compiling
+conventional - s3_it
 ```
 g++ -o whatever s3_it.cpp
+```
+inner loop pp version - s3_pp
+```
+g++ -fopenmp -o app s3_pp.cpp
 ```
 ### Running
 ```
