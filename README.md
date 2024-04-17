@@ -15,6 +15,10 @@ inner loop pp version - s3_pp
 ```
 g++ -fopenmp -o app s3_pp.cpp
 ```
+gpu version s3_gpu
+```
+nvcc -o app filename.cu
+```
 ### Running
 ```
 ./whatever ../dataset/filename.fasta ../dataset/filename2.fasta
