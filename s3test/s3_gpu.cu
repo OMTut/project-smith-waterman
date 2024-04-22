@@ -1,101 +1,205 @@
 #include <iostream>
 #include <fstream>
-#include <vector>
 #include <string>
+#include <algorithm>
 #include <cuda_runtime.h>
 
-__global__ void smith_waterman_kernel(int *dp, const char *seq1, const char *seq2, int n, int m, int match_score, int mismatch_penalty, int gap_penalty, int *max_score) {
-    int i = blockIdx.y * blockDim.y + threadIdx.y + 1;
-    int j = blockIdx.x * blockDim.x + threadIdx.x + 1;
-    if (i > n || j > m) return;
+#define MATCH_SCORE     2
+#define MISMATCH_PENALTY 1
+#define GAP_PENALTY    1
 
-    int index = i * (m + 1) + j;
-    int score_diag = (i > 1 && j > 1) ? dp[(i - 1) * (m + 1) + (j - 1)] : ((i == 1 && j == 1) && (seq1[i-1] == seq2[j-1]) ? match_score : mismatch_penalty);
-    int score_up = (i > 1) ? dp[(i - 1) * (m + 1) + j] - gap_penalty : -gap_penalty;
-    int score_left = (j > 1) ? dp[i * (m + 1) + (j - 1)] - gap_penalty : -gap_penalty;
+int getNumberofGPUS() {
+    int num_gpus = 0;
+    cudaGetDeviceCount(&num_gpus);
+    return num_gpus;
 
-    int cell_score = max(0, max(score_diag, max(score_up, score_left)));
-    int local_max_score = max(cell_score, 0);
+}
 
-    dp[index] = local_max_score;
-    atomicMax(max_score, local_max_score);
+// Kernel to initialize the DP table
+__global__ void init_dp(int *d_dp, int n, int m) {
+    int row = blockIdx.x * blockDim.x + threadIdx.x; // Row index
+    int col = blockIdx.y * blockDim.y + threadIdx.y; // Column index
 
-    // Detailed diagnostics
-    if (threadIdx.x == 0 || threadIdx.x == blockDim.x - 1 || threadIdx.y == 0 || threadIdx.y == blockDim.y - 1) {
-        printf("Boundary Thread (%d,%d) -> idx=%d, diag=%d, up=%d, left=%d, cell=%d, local_max=%d, global_max=%d\n",
-               i, j, index, score_diag, score_up, score_left, local_max_score, *max_score);
+    if (row <= n && col <= m) {
+        d_dp[row * (m + 1) + col] = 0; // Initialize to zero
+        printf("GPU: %d, Row: %d, Col: %d, Initial DP Value: %d\n", blockIdx.z, row, col, d_dp[row * (m + 1) + col]); // Print initial DP value
     }
 }
 
+// Kernel for the Smith-Waterman algorithm using diagonal stripes
+__global__ void smith_waterman(int *d_dp, const char *d_seq1, const char *d_seq2, int n, int m) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    printf("Seq1: %c, Seq2: %c\n", d_seq1[row - 1], d_seq2[col - 1]);
 
+    for (int sum = 2; sum <= n + m; sum++) {
+        if (row > 0 && row <= n && col > 0 && col <= m && row + col == sum) {
+            int diag_score = d_dp[(row - 1) * (m + 1) + (col - 1)];
+            int top_score = d_dp[(row - 1) * (m + 1) + col];
+            int left_score = d_dp[row * (m + 1) + (col - 1)];
 
-std::string read_fasta_block(std::ifstream& file, size_t block_size) {
-    std::string block, line;
-    while (block.size() < block_size && std::getline(file, line)) {
-        if (line.empty() || line[0] == '>') continue;  // Skip headers or empty lines
-        block += line;
+            int match = diag_score + ((d_seq1[row - 1] == d_seq2[col - 1]) ? MATCH_SCORE : -MISMATCH_PENALTY);
+            int delete_score = top_score - GAP_PENALTY;
+            int insert_score = left_score - GAP_PENALTY;
+
+            int final_score = max(max(match, delete_score), max(insert_score, 0));
+
+            d_dp[row * (m + 1) + col] = final_score;
+            printf("Match: %d, Delete: %d, Insert: %d\n", match, delete_score, insert_score);
+            printf("Row: %d, Col: %d, Score: %d\n", row, col, final_score);
+        }
+        __syncthreads();
     }
-    return block;
 }
 
-int smith_waterman_cuda(const std::string& seq1, const std::string& seq2, int match_score, int mismatch_penalty, int gap_penalty) {
-    int n = seq1.length();
-    int m = seq2.length();
-    int *dp, *max_score;
-    char *d_seq1, *d_seq2;
-
-    cudaMalloc((void**)&dp, (n+1) * (m+1) * sizeof(int));
-    cudaMalloc((void**)&max_score, sizeof(int));
-    cudaMemset(max_score, 0, sizeof(int));  // Ensure max_score is zeroed before use
-
-    cudaMalloc((void**)&d_seq1, (n+1) * sizeof(char));
-    cudaMalloc((void**)&d_seq2, (m+1) * sizeof(char));
-    cudaMemcpy(d_seq1, seq1.c_str(), n+1, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_seq2, seq2.c_str(), m+1, cudaMemcpyHostToDevice);
-
-    dim3 threadsPerBlock(16, 16);
-    dim3 numBlocks((m + threadsPerBlock.x - 1) / threadsPerBlock.x, (n + threadsPerBlock.y - 1) / threadsPerBlock.y);
-
-    smith_waterman_kernel<<<numBlocks, threadsPerBlock>>>(dp, d_seq1, d_seq2, n, m, match_score, mismatch_penalty, gap_penalty, max_score);
-    cudaDeviceSynchronize();  // Ensure all operations are completed
-
-    int result;
-    cudaMemcpy(&result, max_score, sizeof(int), cudaMemcpyDeviceToHost);
-
-    cudaFree(dp);
-    cudaFree(d_seq1);
-    cudaFree(d_seq2);
-    cudaFree(max_score);
-
-    return result;
+// Read sequence from FASTA file
+std::string read_sequence(const std::string &filename) {
+    std::ifstream file(filename);
+    std::string line, sequence;
+    bool first_line = true;
+    while (std::getline(file, line)) {
+        if (first_line) {
+            first_line = false;
+            continue;
+        }
+        sequence += line;
+    }
+    return sequence;
 }
 
-int main(int argc, char* argv[]) {
-    std::string path1 = argv[1];
-    std::string path2 = argv[2]; 
-    std::ifstream file1(path1), file2(path2);
-    const size_t block_size = 10000;  // Adjust block size based on your memory constraints
+// Traceback function to build alignment
+int traceback(int *dp, const std::string &seq1, const std::string &seq2, int n, int m) {
+    std::string alignment1, alignment2;
+    int max_score = 0, max_i = 1, max_j = 1;
 
-    if (!file1.is_open() || !file2.is_open()) {
-        std::cerr << "Error opening files!" << std::endl;
-        return -1;
+    // Find the position of the maximum score
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            if (dp[i * (m + 1) + j] > max_score) {
+                max_score = dp[i * (m + 1) + j];
+                max_i = i;
+                max_j = j;
+            }
+        }
     }
+    printf("Starting traceback at cell (%d, %d) with score %d\n", max_i, max_j, max_score);
+    int i = max_i;
+    int j = max_j;
 
-    std::vector<std::string> seq2_blocks;
-    std::string seq2_block;
-    while (!(seq2_block = read_fasta_block(file2, block_size)).empty()) {
-        seq2_blocks.push_back(seq2_block);
-    }
-    file2.close();
+    // Traceback to build the alignment
+    while (i > 0 && j > 0) {
+        int current_score = dp[i * (m + 1) + j];
 
-    std::string seq1_block;
-    while (!(seq1_block = read_fasta_block(file1, block_size)).empty()) {
-        for (const auto& block : seq2_blocks) {
-            int score = smith_waterman_cuda(seq1_block, block, 2, -1, -1);
-            std::cout << "Alignment score: " << score << std::endl;
+        int diag_score = dp[(i - 1) * (m + 1) + (j - 1)];
+        int up_score = dp[(i - 1) * (m + 1) + j];
+        int left_score = dp[i * (m + 1) + (j - 1)];
+
+        printf("Calculating cell (%d, %d) with score %d\n", i, j, current_score);
+
+        if (current_score == diag_score + ((seq1[i - 1] == seq2[j - 1]) ? MATCH_SCORE : -MISMATCH_PENALTY)) {
+            alignment1 += seq1[i - 1];
+            alignment2 += seq2[j - 1];
+            i--;
+            j--;
+        } else if (current_score == up_score - GAP_PENALTY) {
+            alignment1 += seq1[i - 1];
+            alignment2 += '-';
+            i--;
+        } else if (current_score == left_score - GAP_PENALTY) {
+            alignment1 += '-';
+            alignment2 += seq2[j - 1];
+            j--;
+        } else {
+            break; // Safety to avoid infinite loops
         }
     }
 
-    file1.close();
+    std::reverse(alignment1.begin(), alignment1.end());
+    std::reverse(alignment2.begin(), alignment2.end());
+    return max_score;
+}
+
+int main(int argc, char **argv) {
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <seq1.fasta> <seq2.fasta>" << std::endl;
+        return -1;
+    }
+
+    std::string seq1 = read_sequence(argv[1]);
+    std::string seq2 = read_sequence(argv[2]);
+    int n = seq1.size();
+    int m = seq2.size();
+    //std::cout << "Sequence 1: " << seq1 << " - Sequence 1 size: " << n << std::endl;
+    //std::cout << "Sequence 2: " << seq2 << " - Sequence 2 size: " << m << std::endl;
+
+    //count gpus and divide the sequence into parts
+    int num_gpus = getNumberofGPUS();
+    std::cout << "Found " << num_gpus << " CUDA device(s)" << std::endl;
+    int part_size = n / num_gpus;
+
+    int *dp = new int[(n + 1) * (m + 1)](); // Initialize DP table in host memory
+
+    for (int gpu = 0; gpu < num_gpus; gpu++) {
+        cudaSetDevice(gpu);
+        int start = gpu * part_size;
+        int end = start + part_size;
+        int size = end - start;
+        std::cout << "GPU " << gpu << " will process sequence from " << start << " to " << end << std::endl;
+
+        // Initialize the dp matrix with zeroes
+        int *dp = new int[(size + 1) * (m + 1)](); // Initialize with zeros
+        int *d_dp;
+        cudaMalloc(&d_dp, (size + 1) * (m + 1) * sizeof(int));
+        cudaMemset(d_dp, 0, (size + 1) * (m + 1) * sizeof(int));
+
+        char *d_seq1, *d_seq2;
+        cudaMalloc(&d_seq1, size * sizeof(char));
+        cudaMalloc(&d_seq2, m * sizeof(char));
+        cudaMemcpy(d_seq1, seq1.substr(start, size).c_str(), size * sizeof(char), cudaMemcpyHostToDevice);
+        cudaMemcpy(d_seq2, seq2.c_str(), m * sizeof(char), cudaMemcpyHostToDevice);
+
+        dim3 threadsPerBlock(16, 16); // Adjusted block size for computation
+        dim3 numBlocks((size + 15) / 16, (m + 15) / 16); // Grid size for computation
+        smith_waterman<<<numBlocks, threadsPerBlock>>>(d_dp, d_seq1, d_seq2, size, m);
+
+        cudaDeviceSynchronize(); // Ensure computation is complete
+
+        int *temp_dp = new int[(size + 1) * (m + 1)];
+        cudaMemcpy(temp_dp, d_dp, (size + 1) * (m + 1) * sizeof(int), cudaMemcpyDeviceToHost); // Copy DP table back
+        // Accumulate DP table across all GPUs
+        for (int i = 0; i <= size; i++) {
+            for (int j = 0; j <= m; j++) {
+                dp[i * (m + 1) + j] += temp_dp[i * (m + 1) + j];
+            }
+        }
+
+        delete[] temp_dp;
+        cudaFree(d_dp);
+        cudaFree(d_seq1);
+        cudaFree(d_seq2);
+    }
+
+    //merge results
+    // Find the maximum score and its position in the entire DP matrix
+    int max_score = 0, max_i = 0, max_j = 0;
+    for (int i = 0; i <= n; i++) {
+        for (int j = 0; j <= m; j++) {
+            int score = dp[i * (m + 1) + j];
+            if (score > max_score) {
+                max_score = score;
+                max_i = i;
+                max_j = j;
+            }
+        }
+    }
+
+    // Perform the traceback only once, starting at the cell with the maximum score in the entire DP matrix
+    int alignment = traceback(dp, seq1.c_str(), seq2.c_str(), max_i, max_j);
+
+    std::cout << "Alignment: " << alignment << std::endl;
+
+    delete[] dp;
+
     return 0;
 }
+
