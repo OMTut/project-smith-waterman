@@ -41,20 +41,20 @@ __global__ void smith_waterman(int *d_dp, const char *d_seq1, const char *d_seq2
 
         int final_score = max(max(match, delete_score), max(insert_score, 0));
 
-        printf("Thread [%d, %d] calculated final score: %d\n", threadIdx.x, threadIdx.y, final_score);
+        //printf("Thread [%d, %d] calculated final score: %d\n", threadIdx.x, threadIdx.y, final_score);
 
         d_dp[row * (m + 1) + col] = final_score;
     }
-    __syncthreads(); // Ensure all threads have updated the DP table before printing
+    // __syncthreads(); // Ensure all threads have updated the DP table before printing
 
-    if (threadIdx.x == 0 && threadIdx.y == 0) { // Only one thread prints the DP table
-        for (int i = 0; i <= n; i++) {
-            for (int j = 0; j <= m; j++) {
-                printf("%d ", d_dp[i * (m + 1) + j]);
-            }
-            printf("\n");
-        }
-    }
+    // if (threadIdx.x == 0 && threadIdx.y == 0) { // Only one thread prints the DP table
+    //     for (int i = 0; i <= n; i++) {
+    //         for (int j = 0; j <= m; j++) {
+    //             printf("%d ", d_dp[i * (m + 1) + j]);
+    //         }
+    //         printf("\n");
+    //     }
+    // }
 }
 
 // Read sequence from FASTA file
@@ -99,7 +99,7 @@ int traceback(int *dp, const std::string &seq1, const std::string &seq2, int n, 
         int up_score = dp[(i - 1) * (m + 1) + j];
         int left_score = dp[i * (m + 1) + (j - 1)];
 
-        printf("Calculating cell (%d, %d) with score %d\n", i, j, current_score);
+        //printf("Calculating cell (%d, %d) with score %d\n", i, j, current_score);
 
         if (current_score == diag_score + ((seq1[i - 1] == seq2[j - 1]) ? MATCH_SCORE : -MISMATCH_PENALTY)) {
             alignment1 += seq1[i - 1];
@@ -129,7 +129,8 @@ int main(int argc, char **argv) {
         std::cerr << "Usage: " << argv[0] << " <seq1.fasta> <seq2.fasta>" << std::endl;
         return -1;
     }
-
+    std::cout << "Running Smith-Waterman algorithm on GPU" << std::endl;
+    std::cout << "Getting sequences from FASTA files" << std::endl;
     std::string seq1 = read_sequence(argv[1]);
     std::string seq2 = read_sequence(argv[2]);
     int n = seq1.size();
@@ -149,11 +150,12 @@ int main(int argc, char **argv) {
 
     dim3 threadsPerBlockInit(16, 16); // Adjusted block size for initialization
     dim3 numBlocksInit((n + 15) / 16, (m + 15) / 16); // Grid size for initialization
-    //printf("Launching init_dp kernel with %d blocks of %d threads\n", numBlocksInit.x * numBlocksInit.y, threadsPerBlockInit.x * threadsPerBlockInit.y);
+    printf("Launching init_dp kernel with %d blocks of %d threads\n", numBlocksInit.x * numBlocksInit.y, threadsPerBlockInit.x * threadsPerBlockInit.y);
     init_dp<<<numBlocksInit, threadsPerBlockInit>>>(d_dp, n, m);
 
     cudaDeviceSynchronize(); // Wait for the GPU to finish
-    //printf("Finished init_dp kernel\n");
+    printf("Finished init_dp kernel\n");
+    std::cout << "calculating Smith-Waterman algorithm on GPU" << std::endl;
 
     dim3 threadsPerBlock(16, 16); // Adjusted block size for computation
     for (int sum = 0; sum <= n + m; sum++) {
