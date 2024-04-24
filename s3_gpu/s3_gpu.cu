@@ -31,13 +31,13 @@ __global__ void smith_waterman(int *d_dp, const char *d_seq1, const char *d_seq2
         int top_score = d_dp[(row - 1) * (m + 1) + col];
         int left_score = d_dp[row * (m + 1) + (col - 1)];
 
-        printf("Thread [%d, %d] read scores: diag=%d, top=%d, left=%d\n", threadIdx.x, threadIdx.y, diag_score, top_score, left_score);
+        //printf("Thread [%d, %d] read scores: diag=%d, top=%d, left=%d\n", threadIdx.x, threadIdx.y, diag_score, top_score, left_score);
 
         int match = diag_score + ((d_seq1[row - 1] == d_seq2[col - 1]) ? MATCH_SCORE : -MISMATCH_PENALTY);
         int delete_score = top_score - GAP_PENALTY;
         int insert_score = left_score - GAP_PENALTY;
 
-        printf("Thread [%d, %d] calculated scores: match=%d, delete=%d, insert=%d\n", threadIdx.x, threadIdx.y, match, delete_score, insert_score);
+        //printf("Thread [%d, %d] calculated scores: match=%d, delete=%d, insert=%d\n", threadIdx.x, threadIdx.y, match, delete_score, insert_score);
 
         int final_score = max(max(match, delete_score), max(insert_score, 0));
 
