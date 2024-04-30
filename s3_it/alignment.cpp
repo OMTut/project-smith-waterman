@@ -49,6 +49,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    int max_score = 0;
     std::string seq1_block;
     while (!(seq1_block = read_fasta_block(file1, block_size)).empty()) {
         std::ifstream temp_file2(path2);  // Re-open file for each new block from file1 to reset to start
@@ -56,8 +57,10 @@ int main(int argc, char* argv[]) {
         while (!(seq2_block = read_fasta_block(temp_file2, block_size)).empty()) {
             int score = smith_waterman(seq1_block, seq2_block, 2, -1, -1);
             std::cout << "Alignment score: " << score << std::endl;
+            if (score > max_score) max_score = score;
         }
     }
+    std::cout << "Max alignment score: " << max_score << std::endl;
 
     file1.close();
     file2.close();
