@@ -2,7 +2,7 @@
 
 s3_it is a fully working iterative implementation of the Smith-Waterman algorithm used to find local alignments.
 
-s3_pp is a fully working (but partial implementation) of parallelism. I've only managed to get the inner loop to run in parallel so far. My attempts at outter loop always lead to incorrect numbers. It could be a race condition. I dunno.
+s3_pp is a fully working (but partial implementation) of parallelism. I've only managed to get the inner loop to run in parallel so far.
 
 Because the size of the genomes are huge, I'm only printing out an alignment scores. The apps all take fasta files from the /dataset directory.
 
@@ -28,7 +28,7 @@ nvcc -o app filename.cu
 They can be edited just like txt files. Just open it up, make your changes, and save.
 
 ## Smith-Waterman Algo
-A high level (because that's all I understand at this point) is that the SW algo creates a matrix from the two sequences and fills it with scores. The scores represent how close the elements in the sequences match. Each score is computed using a "match score", "mismatch_penalty", and "gap_penalty".
+A high level is that the SW algo creates a matrix from the two sequences and fills it with scores. The scores represent how close the elements in the sequences match. Each score is computed using a "match score", "mismatch_penalty", and "gap_penalty".
 
 Scoring<BR>
 In our case, we're scoring match +=2, mismatch_penalty -=1, and gap_penalty -= 1. A match ends up being 2pts and everything else is 0.
